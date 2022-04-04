@@ -1,0 +1,116 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Parler Video Posts in Dense Geographical Clusters
+
+```{r basicfcn, include=F}
+loadPkg = function(x) { if (!require(x,character.only=T, quietly =T)) { install.packages(x,dep=T,repos="http://cran.us.r-project.org"); if(!require(x,character.only=T)) stop("Package not found") } }
+
+
+loadPkg("tidyverse")
+loadPkg("ggplot2")
+loadPkg("leaflet")
+
+
+
+
+```
+
+
+```{r source data, include=F}
+library(readr)
+hashdf <- read_csv("flnm2hash.csv", col_names = FALSE) # import with no col names
+
+colnames(hashdf) <- c("videoid", "hash") # change col names
+
+```
+
+
+```{r source data 2, include=F}
+library(readr)
+links <- read_csv("Video Density-Master.csv")
+```
+
+```{r merge datasets, include=F}
+master <- merge(hashdf,links,by="videoid")
+
+```
+
+
+```{r group, include=F}
+per_hash <- master %>% 
+  group_by(hash.x) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+  
+
+per_locality <- master %>% 
+  group_by(Locality) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+```
+
+```{r merge with master, include=F}
+geo_per_locality <- left_join(per_locality, master, by = c("Locality"))
+
+geo_per_hash <- left_join(per_hash, master, by = c("hash.x"))
+
+hash <- read_csv("hash_merged.csv")
+
+
+```
+
+
+```{r merge with timestamp, include=F}
+
+hash <- read_csv("hash_merged.csv")
+
+master1 <- merge(hash,links,by="hash")
+
+master1 = subset(master1, select = -c(X1) )
+
+per_hash1 <- rename(per_hash, hash = hash.x )
+
+master2 <- merge(master1,per_hash1,by="hash")
+
+summary(master2)
+
+
+
+```
+
+```{r leaflet Prepare the text for the tooltip, include=F}
+
+Parlermaptext <- paste(
+   "Locality: ", master2$Locality, "<br/>", 
+   "State: ", master2$State, "<br/>",
+   "Timestamp: ", master2$timestamp, "<br/>",
+   "Longitude: ", master2$longitude, "<br/>",
+   "Latitude: ", master2$latitude, "<br/>",
+   "Number of Times Posted: ", master2$count, sep="") %>%
+  lapply(htmltools::HTML)
+
+```
+
+
+```{r leaflet parler videos with legends, echo=F, include=T}
+m <- leaflet(master2) %>%
+    addProviderTiles(providers$OpenStreetMap.Mapnik) %>% 
+  setView(-95.712891,37.09024, zoom = 4) %>% 
+  addCircleMarkers(lng=master2$longitude, lat=master2$latitude, 
+    #popup=~as.character(master2$link),
+                 group = df,
+                 clusterOptions = markerClusterOptions(),
+    label = Parlermaptext,
+    labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")
+  ) 
+
+m
+```
+
+
